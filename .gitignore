@@ -1,0 +1,21 @@
+# deps
+node_modules/
+
+# builds
+.next/
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+dist/
+
+# env & secrets
+.env
+.env.local
+.env.*.local
+
+# runtime data
+.data/
+
+# misc
+*.log
+.DS_Store
