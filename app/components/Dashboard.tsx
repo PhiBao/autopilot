@@ -317,8 +317,12 @@ function IntentCard({ intent }: { intent: IntentDto }) {
               {s.status === "executed" ? "✓" : s.status === "pending_sign" ? "◉" : s.status === "failed" ? "✕" : "·"}
             </span>
             <span className="muted">{s.label}</span>
-            <span className="ml-auto">
-              <StepBadge status={s.status} />
+            <span className="ml-auto flex items-center gap-2">
+              {s.status === "waiting" && s.triggerAt ? (
+                <Countdown to={s.triggerAt} />
+              ) : (
+                <StepBadge status={s.status} />
+              )}
             </span>
           </div>
         ))}
@@ -330,4 +334,13 @@ function IntentCard({ intent }: { intent: IntentDto }) {
       )}
     </div>
   );
+}
+
+function Countdown({ to }: { to: number }) {
+  const [remaining, setRemaining] = useState(() => Math.max(0, Math.round((to - Date.now()) / 1000)));
+  useEffect(() => {
+    const t = setInterval(() => setRemaining(Math.max(0, Math.round((to - Date.now()) / 1000))), 1000);
+    return () => clearInterval(t);
+  }, [to]);
+  return <span className="badge badge-pending">claimable in {remaining}s</span>;
 }

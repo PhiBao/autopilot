@@ -25,15 +25,24 @@ async function readPeriodSettings(ctx: FlareContext, vaultAddress: `0x${string}`
       inputs: [],
       outputs: [{ name: "", type: "uint256" }],
     },
+    {
+      type: "function",
+      name: "lagDuration",
+      stateMutability: "view",
+      inputs: [],
+      outputs: [{ name: "", type: "uint256" }],
+    },
   ] as const;
   try {
-    const [periodDuration, lag] = await Promise.all([
-      ctx.publicClient.readContract({ address: vaultAddress, abi, functionName: "periodDuration" }),
-      ctx.publicClient.readContract({ address: vaultAddress, abi, functionName: "lag" }),
+    const [periodDuration, lag, lagDuration] = await Promise.all([
+      ctx.publicClient.readContract({ address: vaultAddress, abi, functionName: "periodDuration" }).catch(() => 86_400n),
+      ctx.publicClient.readContract({ address: vaultAddress, abi, functionName: "lag" }).catch(() => undefined),
+      ctx.publicClient.readContract({ address: vaultAddress, abi, functionName: "lagDuration" }).catch(() => undefined),
     ]);
-    return { periodDuration: BigInt(periodDuration), lag: BigInt(lag) };
+    // Registered Firelight/Upshift test vaults expose `lagDuration` instead of `lag`.
+    const effectiveLag = lag !== undefined ? lag : lagDuration ?? 86_400n;
+    return { periodDuration: BigInt(periodDuration), lag: BigInt(effectiveLag) };
   } catch {
-    // Registered Firelight/Upshift test vaults expose the same interface.
     return { periodDuration: 86_400n, lag: 86_400n };
   }
 }
