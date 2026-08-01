@@ -39,8 +39,10 @@ export default function Home() {
     setBusy(true);
     setError(null);
     try {
-      await api(`/api/connect?xrpl=${encodeURIComponent(address)}`);
-      localStorage.setItem(CONNECT_KEY, address);
+      const addr = address.trim();
+      if (!addr) throw new Error("Enter your XRPL address above (starts with r)");
+      await api(`/api/connect?xrpl=${encodeURIComponent(addr)}`);
+      localStorage.setItem(CONNECT_KEY, addr);
       router.push("/dashboard");
     } catch (e) {
       setError((e as Error).message);
@@ -89,9 +91,9 @@ export default function Home() {
                 placeholder="rDsbeomae4FXwgQTJp9Rs64Qg9vDiTCdBv"
                 value={xrpl}
                 onChange={(e) => setXrpl(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && xrpl && connect(xrpl)}
+                onKeyDown={(e) => e.key === "Enter" && connect(xrpl)}
               />
-              <button className="btn btn-primary shrink-0" disabled={busy || !xrpl} onClick={() => connect(xrpl)}>
+              <button className="btn btn-primary shrink-0" disabled={busy} onClick={() => connect(xrpl)}>
                 Connect
               </button>
             </div>
@@ -108,7 +110,7 @@ export default function Home() {
             <div className="flex flex-wrap gap-2">
               <a
                 className="btn btn-ghost btn-sm"
-                href="https://faucet.altnet.rippletest.net/"
+                href="https://testnet.xrpl.org/faucet"
                 target="_blank"
                 rel="noreferrer"
               >

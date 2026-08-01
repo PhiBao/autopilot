@@ -28,9 +28,14 @@ export function IntentModal({
     setError(null);
     try {
       if (kind === "deposit") {
+        if (Number(amount) <= 0) throw new Error("Enter an amount greater than 0");
         await onSubmit(kind, amount);
       } else {
-        const sharesUba = defaultShares ?? String(Math.round(Number(amount) * 1_000_000));
+        const sharesUba =
+          defaultShares && BigInt(defaultShares) > 0n
+            ? defaultShares
+            : String(Math.round(Number(amount) * 1_000_000));
+        if (BigInt(sharesUba) <= 0n) throw new Error("No vault shares to withdraw");
         await onSubmit(kind, undefined, sharesUba);
       }
     } catch (e) {

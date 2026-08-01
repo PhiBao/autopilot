@@ -104,6 +104,19 @@ export function Dashboard({ xrpl }: { xrpl: string }) {
     [intents]
   );
 
+  // Only vaults where the user actually holds shares (registered vaults with a
+  // zero balance from getBalances should not clutter "Your vaults").
+  const activePositions = useMemo(
+    () => (positions ? positions.vaults.filter((v) => BigInt(v.shares) > 0n) : []),
+    [positions]
+  );
+
+  // Vaults to offer for deposit: the full catalog, minus any vault already held.
+  const openVaults = useMemo(() => {
+    const held = new Set(activePositions.map((v) => v.vaultAddress.toLowerCase()));
+    return vaults.filter((v) => !held.has(v.address.toLowerCase()));
+  }, [vaults, activePositions]);
+
   if (!positions) {
     return (
       <div className="flex-1">
@@ -150,14 +163,19 @@ export function Dashboard({ xrpl }: { xrpl: string }) {
                 <h2 className="text-lg font-semibold">Your vaults</h2>
                 <span className="text-xs muted">Live from Flare</span>
               </div>
-              {positions.vaults.length === 0 ? (
+              {activePositions.length === 0 ? (
                 <div className="card text-center py-10 muted">
                   No positions yet. Deposit XRP into a vault below and Autopilot handles the rest.
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {positions.vaults.map((v) => (
-                    <VaultPositionRow key={v.vaultId} v={v} onExit={() => setModal({ vault: vaults.find((x) => x.address === v.vaultAddress) ?? vaultFromPosition(v), kind: "exit", shares: v.shares })} />
+                  {activePositions.map((v) => (
+                    <VaultPositionRow
+                      key={v.vaultId}
+                      v={v}
+                      onAdd={() => setModal({ vault: vaults.find((x) => x.address === v.vaultAddress) ?? vaultFromPosition(v), kind: "deposit" })}
+                      onExit={() => setModal({ vault: vaults.find((x) => x.address === v.vaultAddress) ?? vaultFromPosition(v), kind: "exit", shares: v.shares })}
+                    />
                   ))}
                 </div>
               )}
@@ -169,7 +187,7 @@ export function Dashboard({ xrpl }: { xrpl: string }) {
                 <span className="text-xs muted">Earn XRP yield on Flare</span>
               </div>
               <div className="space-y-3">
-                {vaults.map((v) => (
+                {openVaults.map((v) => (
                   <VaultCatalogRow key={v.address} v={v} onDeposit={() => setModal({ vault: v, kind: "deposit" })} />
                 ))}
               </div>
@@ -246,7 +264,15 @@ function vaultFromPosition(p: Position): VaultDto {
   };
 }
 
-function VaultPositionRow({ v, onExit }: { v: Position; onExit: () => void }) {
+function VaultPositionRow({
+  v,
+  onAdd,
+  onExit,
+}: {
+  v: Position;
+  onAdd: () => void;
+  onExit: () => void;
+}) {
   return (
     <div className="card flex items-center justify-between gap-4">
       <div className="min-w-0">
@@ -258,7 +284,10 @@ function VaultPositionRow({ v, onExit }: { v: Position; onExit: () => void }) {
       </div>
       <div className="text-right shrink-0">
         <div className="font-bold text-lg">{v.assetsXrp} <span className="text-xs muted">XRP</span></div>
-        <button className="btn btn-ghost btn-sm mt-1.5" onClick={onExit}>Exit →</button>
+        <div className="flex gap-2 mt-1.5 justify-end">
+          <button className="btn btn-primary btn-sm" onClick={onAdd}>Add</button>
+          <button className="btn btn-ghost btn-sm" onClick={onExit}>Exit</button>
+        </div>
       </div>
     </div>
   );
@@ -324,62 +353,63 @@ function SignCard({
       </div>
       <p className="text-xs muted mb-3">{step?.detail}</p>
 
-      {userOp && (
-        <div className="card bg-[--bg] p-3 mb-3 text-xs space-y-1.5">
-          <div className="flex justify-between gap-2">
-            <span className="faint shrink-0">Send to</span>
-            <button
-              className="mono truncate text-left hover:text-[--accent]"
-              onClick={() => copy(userOp.destination)}
-              title={userOp.destination}
-            >
-              {userOp.destination}
-            </button>
-          </div>
-          <div className="flex justify-between gap-2">
-            <span className="faint shrink-0">Amount</span>
-            <span className="mono">{userOp.paymentAmountXrp.toFixed(2)} XRP</span>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="faint shrink-0">Memo</span>
-            <button
-              className="mono text-left truncate hover:text-[--accent]"
-              onClick={() => copy(userOp.memo.slice(2))}
-              title={userOp.memo}
-            >
-              {userOp.memo.slice(0, 18)}…
-            </button>
-          </div>
-          <button className="btn btn-ghost btn-sm w-full mt-1" onClick={() => copy(userOp.memo.slice(2))}>
-            {copied ? "Copied ✓" : "Copy payment memo"}
-          </button>
-        </div>
-      )}
-
-      <div className="flex gap-2 mb-2">
-        <input
-          className="input mono !py-2 text-xs"
-          placeholder="Signed in your wallet? Paste the XRPL tx hash"
-          value={txHash}
-          onChange={(e) => setTxHash(e.target.value)}
-        />
-        <button
-          className="btn btn-primary btn-sm shrink-0"
-          disabled={busy || !txHash}
-          onClick={() => run({ xrplTxHash: txHash.trim() })}
-        >
-          Confirm
-        </button>
-      </div>
       {isDemo ? (
-        <button className="btn btn-ghost btn-sm w-full" disabled={busy} onClick={() => run({ demoSign: true })}>
-          Sign with demo wallet <span className="opacity-60">(pre-funded, for judging)</span>
+        <button className="btn btn-primary btn-sm w-full" disabled={busy} onClick={() => run({ demoSign: true })}>
+          {busy ? "Signing…" : "Sign with demo wallet"}
         </button>
       ) : (
-        <p className="text-[11px] faint mt-2 leading-relaxed">
-          Signed it? Paste the tx hash above — Autopilot takes it from there. Use a memo-capable
-          wallet (Xaman, Joey, …) and the memo shown above.
-        </p>
+        <>
+          {userOp && (
+            <div className="card bg-[--bg] p-3 mb-3 text-xs space-y-1.5">
+              <div className="flex justify-between gap-2">
+                <span className="faint shrink-0">Send to</span>
+                <button
+                  className="mono truncate text-left hover:text-[--accent]"
+                  onClick={() => copy(userOp.destination)}
+                  title={userOp.destination}
+                >
+                  {userOp.destination}
+                </button>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="faint shrink-0">Amount</span>
+                <span className="mono">{userOp.paymentAmountXrp.toFixed(2)} XRP</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="faint shrink-0">Memo</span>
+                <button
+                  className="mono text-left truncate hover:text-[--accent]"
+                  onClick={() => copy(userOp.memo.slice(2))}
+                  title={userOp.memo}
+                >
+                  {userOp.memo.slice(0, 18)}…
+                </button>
+              </div>
+              <button className="btn btn-ghost btn-sm w-full mt-1" onClick={() => copy(userOp.memo.slice(2))}>
+                {copied ? "Copied ✓" : "Copy payment memo"}
+              </button>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <input
+              className="input mono !py-2 text-xs"
+              placeholder="Paste the XRPL tx hash after signing"
+              value={txHash}
+              onChange={(e) => setTxHash(e.target.value)}
+            />
+            <button
+              className="btn btn-primary btn-sm shrink-0"
+              disabled={busy || !txHash}
+              onClick={() => run({ xrplTxHash: txHash.trim() })}
+            >
+              {busy ? "…" : "Confirm"}
+            </button>
+          </div>
+          <p className="text-[11px] faint mt-2 leading-relaxed">
+            Sign this Payment in a memo-capable wallet (Xaman, Joey, …) using the memo above,
+            then paste the tx hash — Autopilot takes it from there.
+          </p>
+        </>
       )}
       {error && <p className="text-xs mt-2" style={{ color: "var(--red)" }}>{error}</p>}
     </div>
