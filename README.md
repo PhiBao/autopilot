@@ -1,95 +1,159 @@
 # Autopilot — your XRP, on autopilot
 
-**The lifecycle manager for XRP savings on Flare.**
-
-Depositing XRP into a Flare vault is one signature. Exiting is the hard part: redeem, then find
-the redemption period, wait for it to roll, then claim — with nonce collisions, stuck mints and
-delayed finality lurking at every step. Autopilot is the layer between "one signature in" and
-"one signature out": it decomposes your outcome into the exact Flare Smart Account steps, drives
-everything that doesn't need your key, and asks you to sign only when a signature is genuinely
-required.
-
-Built for the **Flare Summer Signal** hackathon (Interoperable Asset Products bounty).
+**Flare Summer Signal · Bounty: Interoperable Asset Products**
 
 ---
 
-## The problem
+## Project name
 
-Flare Smart Accounts made XRPfi **deposits** one signature ("One Signature XRPFi", FSA v1.3).
-But the *rest* of the journey is still manual and hostile to retail users:
+**Autopilot** — the lifecycle manager for XRP savings on Flare Smart Accounts.
 
-- **Multi-step exits.** Firelight: `redeem` → wait a period → `claimWithdraw(period)`. Upshift:
-  `requestRedeem` → wait an epoch → `claim(year, month, day)`. Each step is a separate signed
-  XRPL payment; the claim's `period` is only discoverable by parsing events.
-- **Miss the window, funds sit in limbo.** Claims are only valid after the period rolls and lag
-  elapses.
-- **Documented failure modes.** Nonce collisions, `DirectMintingDelayed` rate limits, stuck
-  payments at the Core Vault, `InvalidNonce` from duplicate payments — all fully documented by
-  Flare, none handled by the consumer.
-- **Risk blindness.** Vaults have different strategies, lockups, slashing exposure and caps that
-  fill up. Nobody explains the second half of the journey.
+## Bounty
 
-## The product
+**Bounty 1 — Interoperable Asset Products** ($6,000). The product is a consumer layer on
+Flare's own interoperability stack (Flare Smart Accounts + FAssets + Flare Data Connector).
 
-| Capability | What it does |
+## Short product description
+
+Depositing XRP into a Flare vault is one signature ("One Signature XRPFi", FSA v1.3). Exiting is
+the hard part — redeem, find the redemption period, wait for it to roll, then claim, each step a
+freshly signed XRPL payment. **Autopilot is the layer between "one signature in" and "one
+signature out"**: it turns a user's outcome ("deposit", "exit") into the exact Flare Smart
+Account steps, drives everything that doesn't need the user's key (attestation, delivery,
+nonces, retries, period scheduling), and asks for a signature only when a signature is truly
+required.
+
+## Target user
+
+Retail XRP holders using Flare Smart Accounts / FAssets to earn yield on their XRP — the exact
+population FSA v1.3 is onboarding via Xaman, D'CENT, Joey, Ledger and Bifrost. They can deposit
+in one signature today; they have no tooling for the second half of the journey.
+
+---
+
+## Demo
+
+| | |
 |---|---|
-| **Connect** | Paste any XRPL address; your Flare Smart Account is resolved automatically. No new wallet, no gas token, no bridge. |
-| **Positions** | Live view of FXRP and per-vault positions (shares + assets) straight from the chain, with plain-English risk cards per vault. |
-| **Deposit intent** | One signature mints FXRP **and** deposits it atomically (approve + deposit in one userOp). |
-| **Exit intent** | Two signatures, auto-timed: burn shares now, then Autopilot computes the exact redemption `period`, waits for it to roll, and pings you to sign the claim. |
-| **Executor service** | Non-custodial delivery of `0xFE` custom instructions: FDC attestation, `executeDirectMintingWithData`, nonce management, `DirectMintingDelayed` retry, `PaymentAlreadyConfirmed` recovery. |
-| **Inbox** | "What happened, what's next, what needs your signature and why." |
+| **Working app** | Run locally: `cd app && pnpm i && cp .env.example .env.local && pnpm dev` → open http://localhost:3000 → **"Try the demo wallet"** |
+| **Live network** | Flare **Coston2** testnet (chain id `114`) — all flows below are real, on-chain |
+| **Video** | See `VIDEO_DEMO_GUIDE.md` (3-min script) |
+| **Proof** | Every flow has live tx hashes in [`LIVE_PROOF.md`](./LIVE_PROOF.md) |
+
+**The demo in 60 seconds** (demo wallet + Autopilot demo vault are pre-configured):
+
+1. Connect the demo wallet → see positions + risk cards.
+2. **Deposit 2 XRP** → sign once → FXRP is minted and deposited atomically (`UserOperationExecuted` in one receipt).
+3. **Exit** → sign once to burn shares → Autopilot reads the redemption `period` from the
+   `WithdrawRequest` event and schedules the claim → when the period rolls, it promotes the step
+   and pings you → sign once → FXRP is back.
+
+---
+
+## How Autopilot uses Flare (meaningfully, not superficially)
+
+Every step is executed through Flare's native primitives:
+
+| Flare primitive | Where Autopilot uses it |
+|---|---|
+| **Flare Smart Accounts** | Every action is a `0xFE` hash-memo **custom instruction** delivered to `MasterAccountController`, executed by the user's `PersonalAccount.executeUserOp` (EIP-4337-style batch). The 42-byte memo commits `keccak256(PackedUserOperation)` — only the user's XRPL key can authorize a step. |
+| **FAssets (FXRP)** | Minting via `AssetManagerFXRP.executeDirectMintingWithData`; positions via `IReaderFacet.getBalances`. Deposit = mint + approve + deposit in one atomic userOp. |
+| **Flare Data Connector** | A fresh `XRPPayment` attestation proves every XRPL payment before delivery; the executor handles `DirectMintingDelayed` retries with the same proof and `PaymentAlreadyConfirmed` recovery. |
+| **PersonalAccount determinism** | The user's smart account is resolved from any XRPL address (`getPersonalAccount`) — no new wallet, no gas token, no bridge. |
+
+The executor is **non-custodial by construction**: it never holds user keys or funds, and the
+on-chain `keccak256` commitment check means it cannot substitute bytes or trigger a userOp the
+user did not sign.
+
+---
+
+## What was newly built during the program
+
+1. **`AutopilotVault`** (Foundry, 8 passing tests) — a Firelight-style redemption-period savings
+   vault deployed on Coston2 with 60-second periods, so the full deposit → period → claim
+   lifecycle can be exercised and judged live.
+2. **Flare library** (`app/lib/flare/`) — dependency-injected adapters over Flare Smart
+   Accounts, FAssets and FDC (viem), including a nonce tracker and raw-broadcast layer that
+   handles Coston2's RPC quirks (500 gwei minimum fee, Avalanche C-chain nonce lag).
+3. **Intent engine** (`app/lib/intent/`) — decomposes user outcomes into exact userOp steps with
+   auto-scheduled triggers; prepares the 42-byte `0xFE` memo, XRPL payment amount and executor bytes.
+4. **Executor service** (`app/lib/executor/`) — non-custodial delivery engine: FDC attestation,
+   `executeDirectMintingWithData`, nonce management, `DirectMintingDelayed` retry,
+   `PaymentAlreadyConfirmed` recovery, and period/claim scheduling (with an in-flight step guard).
+5. **Consumer app** — Next.js dashboard: connect, live positions, risk cards, deposit/exit
+   intents, and an "Autopilot" inbox that requests a signature only when one is needed.
+
+## Smart contracts & deployment details
+
+Network: **Coston2 testnet** (chain id `114`).
+
+| Contract | Address | Deploy tx |
+|---|---|---|
+| `AutopilotVault` (60s periods, FXRP asset) | `0x040fee7daab727d6afb8efe6b770b15c0b2a89f6` | `0x2707aa6671c9dabe3e834ad8d8b6cd256c1ec03066b542ab42ccc3af20b17dde` |
+
+Flare system contracts (resolved via `FlareContractRegistry`):
+`MasterAccountController` `0x434936d47503353f06750Db1A444DBDC5F0AD37c` · `AssetManagerFXRP`
+`0xc1Ca88b937d0b528842F95d5731ffB586f4fbDFA` · FXRP `0x0b6A3645c240605887a5532109323A3E12273dc7`.
+
+Executor (fee-only, funded): `0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf`.
+Demo user (XRPL testnet): `raBXKgiRor958xVko9mgb3AnnwRNbWNVfv` →
+personal account `0x6e2b0AcC221F2B59Fb6c7dA6dEf689bFEBC2e534`.
+
+---
 
 ## Architecture
 
 ```
-app/                    Next.js app (UI + API routes)
-  api/connect           resolve personal account for an XRPL address
-  api/positions         live positions across vaults (incl. demo vault)
-  api/vaults            vault catalog with risk profiles
-  api/intents           create/list deposit & exit intents
-  api/intents/:id/sign  record a user signature (or demo-sign)
-  api/executor/tick     cron-driven executor: promote + deliver steps
-lib/flare/              DI adapters over FSA, FAssets, FDC (viem)
-lib/intent/             intent → step decomposition, userOp preparation
-lib/executor/           delivery engine (nonce tracking, retries, scheduling)
-lib/store.ts            BigInt-safe persistence (fs / Postgres-ready)
-contracts/              Foundry: AutopilotVault + tests
-scripts/                deploy, probe, executor round-trip, exit lifecycle
+app/                      Next.js app (UI + API routes)
+  api/connect             resolve personal account for an XRPL address
+  api/positions           live positions across vaults (incl. demo vault)
+  api/vaults              vault catalog with risk profiles
+  api/intents             create/list deposit & exit intents
+  api/intents/:id/sign    record a user signature (or demo-sign)
+  api/executor/tick       cron-driven executor: promote + deliver steps
+lib/flare/                DI adapters over FSA, FAssets, FDC (viem)
+lib/intent/               intent → step decomposition, userOp preparation
+lib/executor/             delivery engine (nonce tracking, retries, scheduling)
+lib/store.ts              BigInt-safe persistence (fs / Postgres-ready)
+contracts/                Foundry: AutopilotVault + tests
+scripts/                  deploy, probe, executor round-trip, exit lifecycle
 ```
 
-## How the executor stays non-custodial
-
-The user's XRPL key authorizes every userOp: each step is an XRPL Payment whose 42-byte `0xFE`
-memo commits to `keccak256(PackedUserOperation)`. The executor only (a) reads the FDC
-`XRPPayment` attestation and (b) calls `AssetManagerFXRP.executeDirectMintingWithData(proof, bytes)`.
-The on-chain hash check means the executor **cannot** substitute different bytes or trigger a
-userOp the user didn't sign. Executor keys never touch user funds.
-
-## Setup
+## Setup & how to test
 
 ```bash
-cp .env.example .env.local
-# fund the executor key (EXECUTOR_PRIVATE_KEY) with C2FLR via the Coston2 faucet
-# fund an XRPL testnet wallet; set XRPL_DEMO_SEED / XRPL_DEMO_ADDRESS / NEXT_PUBLIC_DEMO_XRPL
+cd app
+cp .env.example .env.local      # pre-filled with working Coston2 values
 pnpm install
-pnpm dev            # http://localhost:3000
+pnpm dev                        # http://localhost:3000 → "Try the demo wallet"
 ```
 
-Contracts:
-
-```bash
-cd contracts && forge test          # 8 passing tests
-cd ../app && pnpm tsx --env-file=.env.local scripts/deploy-vault.ts
-```
-
-Verify live:
+Verify on-chain (needs C2FLR on the executor + XRP on the demo wallet):
 
 ```bash
 pnpm tsx --env-file=.env.local scripts/executor-roundtrip.ts   # mint + deposit proof-of-life
 pnpm tsx --env-file=.env.local scripts/exit-lifecycle.ts       # redeem → period → claim
+cd ../contracts && forge test                                  # 8 passing tests
 ```
 
-## Evidence
+---
 
-See [LIVE_PROOF.md](./LIVE_PROOF.md) — every flow above has live Coston2 tx hashes.
+## Roadmap / next steps
+
+- **Mainnet** readiness with real Firelight / Clearstar / Monarq vaults (positions already read
+  via `getBalances`); a self-sustaining executor fee model.
+- **Recovery UI**: guided `0xE0` skip-memo / `0xE1` nonce recovery for stuck payments.
+- **Compound intent** and **cap alerts** so users capture vault cap openings automatically.
+- **Wallet distribution**: Joey in-wallet dApp, Xaman xApp, D'CENT integration.
+
+## Traction signals (honest)
+
+- All core flows validated **live on Coston2** with public tx hashes (`LIVE_PROOF.md`).
+- Built in one week during the hackathon; demo is reproducible from `.env.example`.
+- Early feedback channel: Flare hackathon Telegram (see submission for links).
+
+## Security posture
+
+Non-custodial end-to-end: the user's XRPL key authorizes every step; the executor delivers only
+the user-committed bytes and holds no user funds. Executor key is server-side only. Steps are
+validated before delivery; broadcasts use explicit gas/fees and a serialized nonce tracker.
