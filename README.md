@@ -110,12 +110,26 @@ app/                      Next.js app (UI + API routes)
   api/intents             create/list deposit & exit intents
   api/intents/:id/sign    record a user signature (or demo-sign)
   api/executor/tick       cron-driven executor: promote + deliver steps
+  api/mcp                 Model Context Protocol endpoint (JSON-RPC 2.0)
+  mcp                     interactive MCP test page
 lib/flare/                DI adapters over FSA, FAssets, FDC (viem)
 lib/intent/               intent → step decomposition, userOp preparation
 lib/executor/             delivery engine (nonce tracking, retries, scheduling)
+lib/mcp/                  MCP tools + JSON-RPC server
 lib/store.ts              BigInt-safe persistence (fs / Postgres-ready)
 contracts/                Foundry: AutopilotVault + tests
 scripts/                  deploy, probe, executor round-trip, exit lifecycle
+```
+
+## Agentic access — Autopilot MCP
+
+The same engine is exposed as a **Model Context Protocol** endpoint (`POST /api/mcp`), so an
+AI agent can manage a user's XRP savings on Flare: `get_positions`, `get_vaults`,
+`create_deposit`, `create_exit`, `sign_step`, `run_executor`, `get_intents`. Try it interactively
+at `/mcp`, or wire it into Claude Desktop / Cursor:
+
+```json
+{ "mcpServers": { "autopilot": { "type": "http", "url": "http://localhost:3000/api/mcp" } } }
 ```
 
 ## Setup & how to test locally

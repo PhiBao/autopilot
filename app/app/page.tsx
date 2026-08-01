@@ -63,6 +63,9 @@ export default function Home() {
           <span className="badge">for XRP on Flare</span>
         </div>
         <div className="flex items-center gap-3">
+          <a className="btn btn-ghost btn-sm hidden md:inline-flex" href="/mcp">
+            MCP
+          </a>
           <span className="hidden md:block muted text-sm">Live on Flare testnet</span>
           <button className="btn btn-ghost btn-sm" onClick={() => router.push("/dashboard")}>
             Open app
@@ -105,24 +108,16 @@ export default function Home() {
             <hr className="rule my-4" />
 
             <div className="text-xs muted mb-2">
-              New to the testnet? Get free funds to test with your own wallet:
+              New to the testnet? Get free C2FLR (Flare testnet gas):
             </div>
             <div className="flex flex-wrap gap-2">
-              <a
-                className="btn btn-ghost btn-sm"
-                href="https://testnet.xrpl.org/faucet"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Get testnet XRP →
-              </a>
               <a
                 className="btn btn-ghost btn-sm"
                 href="https://faucet.flare.network/coston2"
                 target="_blank"
                 rel="noreferrer"
               >
-                Get C2FLR (gas) →
+                Get C2FLR →
               </a>
             </div>
 
