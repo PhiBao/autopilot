@@ -119,22 +119,46 @@ contracts/                Foundry: AutopilotVault + tests
 scripts/                  deploy, probe, executor round-trip, exit lifecycle
 ```
 
-## Setup & how to test
+## Setup & how to test locally
+
+The Next.js app lives in **`app/`**, so its env files live there too (`app/.env.example`,
+`app/.env.local`) — this is standard Next.js: `next dev` loads `.env.local` from the app's own
+directory, never from the repo root.
+
+**The env files are pre-filled with the exact live-tested Coston2 values** (see `LIVE_PROOF.md`);
+nothing to fill in. To verify on your machine:
 
 ```bash
 cd app
-cp .env.example .env.local      # pre-filled with working Coston2 values
+cp .env.example .env.local   # ready values — just copy, no edits needed
 pnpm install
-pnpm dev                        # http://localhost:3000 → "Try the demo wallet"
+pnpm dev                     # open http://localhost:3000 → "Try the demo wallet"
 ```
 
-Verify on-chain (needs C2FLR on the executor + XRP on the demo wallet):
+Ready values that are already baked in (all confirmed live on Coston2):
+
+| Value | What it is |
+|---|---|
+| `EXECUTOR_PRIVATE_KEY=0x0000…0001` | Coston2 test key → executor `0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf` (funded, 85+ C2FLR) |
+| `XRPL_DEMO_SEED=sEd7WWqd…` → `raBXKgiRor958xVko9mgb3AnnwRNbWNVfv` | funded XRPL testnet demo wallet (97+ XRP) |
+| `NEXT_PUBLIC_DEMO_XRPL=raBXKgi…` | the wallet the "Try the demo wallet" button connects |
+| `VERIFIER_API_KEY_TESTNET=00000000-…` | Flare's public FDC verifier API key (shared by all testnet devs) |
+
+Clean slate before a demo (optional):
+
+```bash
+rm -rf app/.data      # wipes recorded intents for a fresh start
+```
+
+Verify on-chain (needs C2FLR on the executor + XRP on the demo wallet — both already funded):
 
 ```bash
 pnpm tsx --env-file=.env.local scripts/executor-roundtrip.ts   # mint + deposit proof-of-life
 pnpm tsx --env-file=.env.local scripts/exit-lifecycle.ts       # redeem → period → claim
 cd ../contracts && forge test                                  # 8 passing tests
 ```
+
+> Note: `.env.example` is committed to the repo; `.env.local` is git-ignored (local copy only).
 
 ---
 
