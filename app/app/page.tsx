@@ -81,24 +81,57 @@ export default function Home() {
         </p>
 
         <div className="mt-10 max-w-xl">
-          <label className="block text-sm muted mb-2">Connect an XRPL address</label>
-          <div className="flex gap-2">
-            <input
-              className="input mono"
-              placeholder="rLReZoi6KFGeDC6pZv6kNuAGzhaSyJ4CMb"
-              value={xrpl}
-              onChange={(e) => setXrpl(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && xrpl && connect(xrpl)}
-            />
-            <button className="btn btn-primary" disabled={busy || !xrpl} onClick={() => connect(xrpl)}>
-              Connect
-            </button>
-          </div>
-          <div className="mt-3 flex items-center gap-3">
-            <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => connect(process.env.NEXT_PUBLIC_DEMO_XRPL || "rLReZoi6KFGeDC6pZv6kNuAGzhaSyJ4CMb")}>
-              Try the demo wallet →
-            </button>
-            <span className="faint text-xs">demo funds on the Flare testnet</span>
+          <div className="card">
+            <label className="block text-sm muted mb-2">Connect your XRPL wallet</label>
+            <div className="flex gap-2">
+              <input
+                className="input mono"
+                placeholder="rDsbeomae4FXwgQTJp9Rs64Qg9vDiTCdBv"
+                value={xrpl}
+                onChange={(e) => setXrpl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && xrpl && connect(xrpl)}
+              />
+              <button className="btn btn-primary shrink-0" disabled={busy || !xrpl} onClick={() => connect(xrpl)}>
+                Connect
+              </button>
+            </div>
+            <p className="text-xs faint mt-2">
+              Your Flare Smart Account is derived from your XRPL address — no new wallet, no gas
+              token, no bridge. You sign only when Autopilot needs your key.
+            </p>
+
+            <hr className="rule my-4" />
+
+            <div className="text-xs muted mb-2">
+              New to the testnet? Get free funds to test with your own wallet:
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <a
+                className="btn btn-ghost btn-sm"
+                href="https://faucet.altnet.rippletest.net/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Get testnet XRP →
+              </a>
+              <a
+                className="btn btn-ghost btn-sm"
+                href="https://faucet.flare.network/coston2"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Get C2FLR (gas) →
+              </a>
+            </div>
+
+            <hr className="rule my-4" />
+
+            <div className="flex items-center gap-3">
+              <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => connect(process.env.NEXT_PUBLIC_DEMO_XRPL || "rLReZoi6KFGeDC6pZv6kNuAGzhaSyJ4CMb")}>
+                Or try the demo wallet →
+              </button>
+              <span className="faint text-xs">pre-funded, for quick judging</span>
+            </div>
           </div>
           {error && <p className="mt-3 text-sm" style={{ color: "var(--red)" }}>{error}</p>}
         </div>

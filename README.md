@@ -37,7 +37,6 @@ in one signature today; they have no tooling for the second half of the journey.
 |---|---|
 | **Working app** | Run locally: `cd app && pnpm i && cp .env.example .env.local && pnpm dev` → open http://localhost:3000 → **"Try the demo wallet"** |
 | **Live network** | Flare **Coston2** testnet (chain id `114`) — all flows below are real, on-chain |
-| **Video** | See `VIDEO_DEMO_GUIDE.md` (3-min script) |
 | **Proof** | Every flow has live tx hashes in [`LIVE_PROOF.md`](./LIVE_PROOF.md) |
 
 **The demo in 60 seconds** (demo wallet + Autopilot demo vault are pre-configured):
@@ -157,8 +156,6 @@ pnpm tsx --env-file=.env.local scripts/executor-roundtrip.ts   # mint + deposit 
 pnpm tsx --env-file=.env.local scripts/exit-lifecycle.ts       # redeem → period → claim
 cd ../contracts && forge test                                  # 8 passing tests
 ```
-
-> Note: `.env.example` is committed to the repo; `.env.local` is git-ignored (local copy only).
 
 ---
 

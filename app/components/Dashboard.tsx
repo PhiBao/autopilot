@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type IntentDto, type Position, type VaultDto, formatXrp } from "@/lib/client";
+import { api, type IntentDto, type Position, type VaultDto, formatXrp, DEMO_XRPL } from "@/lib/client";
 import { Header } from "@/components/Header";
 import { RiskBadge, StepBadge } from "@/components/Badges";
 import { IntentModal } from "@/components/IntentModal";
@@ -34,7 +34,8 @@ export function Dashboard({ xrpl }: { xrpl: string }) {
 
   const loadIntents = useCallback(async () => {
     try {
-      setIntents(await api<IntentDto[]>(`/api/intents?xrpl=${encodeURIComponent(xrpl)}`));
+      const r = await api<{ intents: IntentDto[] }>(`/api/intents?xrpl=${encodeURIComponent(xrpl)}`);
+      setIntents(r.intents);
     } catch (e) {
       /* non-fatal */
     }
@@ -86,8 +87,8 @@ export function Dashboard({ xrpl }: { xrpl: string }) {
     setIntents((prev) => [intent, ...prev]);
   }
 
-  async function signStep(intentId: string) {
-    await api(`/api/intents/${intentId}/sign`, { method: "POST", body: JSON.stringify({ demoSign: true }) });
+  async function signStep(intentId: string, opts: { xrplTxHash?: string; demoSign?: boolean }) {
+    await api(`/api/intents/${intentId}/sign`, { method: "POST", body: JSON.stringify(opts) });
     await loadIntents();
     await tick();
   }
@@ -188,7 +189,7 @@ export function Dashboard({ xrpl }: { xrpl: string }) {
               <div className="mb-4 space-y-3">
                 <div className="text-xs muted uppercase tracking-wide">Needs your signature</div>
                 {pendingSigns.map((i) => (
-                  <SignCard key={i.id} intent={i} onSign={() => signStep(i.id)} />
+                  <SignCard key={i.id} intent={i} isDemo={xrpl.toLowerCase() === DEMO_XRPL.toLowerCase()} onSign={signStep} />
                 ))}
               </div>
             )}
@@ -281,8 +282,40 @@ function VaultCatalogRow({ v, onDeposit }: { v: VaultDto; onDeposit: () => void 
   );
 }
 
-function SignCard({ intent, onSign }: { intent: IntentDto; onSign: () => void }) {
+function SignCard({
+  intent,
+  isDemo,
+  onSign,
+}: {
+  intent: IntentDto;
+  isDemo: boolean;
+  onSign: (intentId: string, opts: { xrplTxHash?: string; demoSign?: boolean }) => Promise<void>;
+}) {
+  const [txHash, setTxHash] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const step = intent.steps.find((s) => s.status === "pending_sign");
+  const userOp = step?.userOp;
+
+  async function run(opts: { xrplTxHash?: string; demoSign?: boolean }) {
+    setBusy(true);
+    setError(null);
+    try {
+      await onSign(intent.id, opts);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy(text: string) {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
   return (
     <div className="card-soft p-4" style={{ borderColor: "rgba(96,165,250,0.4)" }}>
       <div className="flex items-center justify-between mb-1">
@@ -290,9 +323,65 @@ function SignCard({ intent, onSign }: { intent: IntentDto; onSign: () => void })
         <StepBadge status={step?.status ?? "pending_sign"} />
       </div>
       <p className="text-xs muted mb-3">{step?.detail}</p>
-      <button className="btn btn-primary btn-sm w-full" onClick={onSign}>
-        Sign in Xaman <span className="opacity-70">(demo wallet)</span>
-      </button>
+
+      {userOp && (
+        <div className="card bg-[--bg] p-3 mb-3 text-xs space-y-1.5">
+          <div className="flex justify-between gap-2">
+            <span className="faint shrink-0">Send to</span>
+            <button
+              className="mono truncate text-left hover:text-[--accent]"
+              onClick={() => copy(userOp.destination)}
+              title={userOp.destination}
+            >
+              {userOp.destination}
+            </button>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="faint shrink-0">Amount</span>
+            <span className="mono">{userOp.paymentAmountXrp.toFixed(2)} XRP</span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="faint shrink-0">Memo</span>
+            <button
+              className="mono text-left truncate hover:text-[--accent]"
+              onClick={() => copy(userOp.memo.slice(2))}
+              title={userOp.memo}
+            >
+              {userOp.memo.slice(0, 18)}…
+            </button>
+          </div>
+          <button className="btn btn-ghost btn-sm w-full mt-1" onClick={() => copy(userOp.memo.slice(2))}>
+            {copied ? "Copied ✓" : "Copy payment memo"}
+          </button>
+        </div>
+      )}
+
+      <div className="flex gap-2 mb-2">
+        <input
+          className="input mono !py-2 text-xs"
+          placeholder="Signed in your wallet? Paste the XRPL tx hash"
+          value={txHash}
+          onChange={(e) => setTxHash(e.target.value)}
+        />
+        <button
+          className="btn btn-primary btn-sm shrink-0"
+          disabled={busy || !txHash}
+          onClick={() => run({ xrplTxHash: txHash.trim() })}
+        >
+          Confirm
+        </button>
+      </div>
+      {isDemo ? (
+        <button className="btn btn-ghost btn-sm w-full" disabled={busy} onClick={() => run({ demoSign: true })}>
+          Sign with demo wallet <span className="opacity-60">(pre-funded, for judging)</span>
+        </button>
+      ) : (
+        <p className="text-[11px] faint mt-2 leading-relaxed">
+          Signed it? Paste the tx hash above — Autopilot takes it from there. Use a memo-capable
+          wallet (Xaman, Joey, …) and the memo shown above.
+        </p>
+      )}
+      {error && <p className="text-xs mt-2" style={{ color: "var(--red)" }}>{error}</p>}
     </div>
   );
 }

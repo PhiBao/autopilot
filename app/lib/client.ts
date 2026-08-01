@@ -27,6 +27,13 @@ export type IntentStepDto = {
   flareTxHash?: string;
   result?: Record<string, unknown>;
   error?: string;
+  userOp?: {
+    destination: string;
+    paymentAmountXrp: number;
+    memo: string;
+    nonce: string;
+    totalCallValue: string;
+  };
 };
 
 export type IntentDto = {
