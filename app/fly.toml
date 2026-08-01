@@ -1,0 +1,59 @@
+# Fly.io config for Autopilot (Flare Coston2 testnet demo)
+# See DEPLOY.md in this directory for step-by-step instructions.
+#
+# All values here are the live-tested Coston2 TESTNET values from .env.example.
+# Nothing here is sensitive (testnet keys only). If you ever deploy a mainnet
+# build, move EXECUTOR_PRIVATE_KEY into `fly secrets set` instead.
+
+app = "autopilot-beta"
+
+# Pick the region closest to you / your judges: see `fly platform regions`.
+# Common: sin (Singapore), iad (Washington DC), ams (Amsterdam), nrt (Tokyo).
+primary_region = "sin"
+
+[build]
+  [build.args]
+    NEXT_PUBLIC_DEMO_XRPL = "raBXKgiRor958xVko9mgb3AnnwRNbWNVfv"
+    NEXT_PUBLIC_NETWORK = "coston2"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  DATA_DIR = "/data"
+  NEXT_PUBLIC_NETWORK = "coston2"
+  EXECUTOR_PRIVATE_KEY = "0x0000000000000000000000000000000000000000000000000000000000000001"
+  COSTON2_RPC_URL = "https://coston2-api.flare.network/ext/C/rpc"
+  FLARE_RPC_URL = "https://flare-api.flare.network/ext/C/rpc"
+  VERIFIER_URL_TESTNET = "https://fdc-verifiers-testnet.flare.network/"
+  VERIFIER_URL_MAINNET = "https://fdc-verifiers-mainnet.flare.network/"
+  VERIFIER_API_KEY_TESTNET = "00000000-0000-0000-0000-000000000000"
+  VERIFIER_API_KEY_MAINNET = "00000000-0000-0000-0000-000000000000"
+  COSTON2_DA_LAYER_URL = "https://ctn2-data-availability.flare.network"
+  FLARE_DA_LAYER_URL = "https://flr-data-availability.flare.network"
+  XRPL_TESTNET_RPC_URL = "wss://testnet.xrpl-labs.com"
+  XRPL_MAINNET_RPC_URL = "wss://s1.ripple.com"
+  XRPL_DEMO_SEED = "sEd7WWqdZMzR8FZDiFa8EPawzr5YYDe"
+  XRPL_DEMO_ADDRESS = "raBXKgiRor958xVko9mgb3AnnwRNbWNVfv"
+  NEXT_PUBLIC_DEMO_XRPL = "raBXKgiRor958xVko9mgb3AnnwRNbWNVfv"
+
+# Persistent volume for the intent store (lib/store.ts writes intents.json here).
+# Create it once before first deploy:
+#   fly volumes create autopilot_data --region sin --size 1
+[[mounts]]
+  source = "autopilot_data"
+  destination = "/data"
+
+# The dashboard drives the executor by polling /api/executor/tick every 10s,
+# so the app must stay awake for the demo to work. Keep 1 machine always on.
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

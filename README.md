@@ -47,6 +47,20 @@ in one signature today; they have no tooling for the second half of the journey.
    `WithdrawRequest` event and schedules the claim → when the period rolls, it promotes the step
    and pings you → sign once → FXRP is back.
 
+### Why a demo vault?
+
+Real Firelight / Upshift / Monarq vaults have redemption periods that last **days** — correct
+for production, useless for a live demo. So Autopilot ships its own
+[`AutopilotVault`](./contracts/src/AutopilotVault.sol) with **60-second periods**: the same
+redemption-period contract logic (period → lag → claim), deployed on Coston2, so the full
+deposit → period-roll → claim lifecycle can be watched on screen in two minutes. The engine
+already reads positions from the **real registered vaults** (`getBalances`) and only swaps the
+vault address to go live.
+
+### Deployment
+
+→ "Try the demo wallet" — same demo wallet, same live Coston2 state, dashboard-driven executor.
+To host your own, see [`app/DEPLOY.md`](./app/DEPLOY.md).
 ---
 
 ## How Autopilot uses Flare (meaningfully, not superficially)
@@ -103,20 +117,45 @@ personal account `0x6e2b0AcC221F2B59Fb6c7dA6dEf689bFEBC2e534`.
 ## Architecture
 
 ```
+                          ┌──────────────────────────────────────────────┐
+                          │                USER (retail XRP holder)      │
+                          │   Xaman / D'CENT / Joey / any XRPL wallet    │
+                          └───────────────────┬──────────────────────────┘
+                                              │  one XRPL Payment, 42-byte 0xFE
+                                              │  hash-memo  =  keccak256(userOp)
+                                              ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                            AUTOPILOT (non-custodial)                          │
+│  Intent engine ──▶ userOp steps + schedule    ──▶  Executor service          │
+│  (outcome → steps, auto-timed triggers)          (deliver, nonce-track, retry)│
+│  MCP endpoint (AI agent access)               ──▶  FDC attestation request    │
+└──────────────────────────────┬────────────────────────────────────────────────┘
+                               │  deliver via FDC
+                               ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                           FLARE (Coston2 / mainnet)                           │
+│  Flare Data Connector: XRPPayment attestation proof                           │
+│  MasterAccountController ──▶ PersonalAccount.executeUserOp (FSA v1.3)         
+│  AssetManagerFXRP: executeDirectMintingWithData  →  FXRP                      │
+│  AutopilotVault / Firelight / Upshift vaults: deposit → period → claim        │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
+
+```
 app/                      Next.js app (UI + API routes)
   api/connect             resolve personal account for an XRPL address
   api/positions           live positions across vaults (incl. demo vault)
   api/vaults              vault catalog with risk profiles
   api/intents             create/list deposit & exit intents
   api/intents/:id/sign    record a user signature (or demo-sign)
-  api/executor/tick       cron-driven executor: promote + deliver steps
+  api/executor/tick       dashboard-driven executor: promote + deliver steps
   api/mcp                 Model Context Protocol endpoint (JSON-RPC 2.0)
   mcp                     interactive MCP test page
 lib/flare/                DI adapters over FSA, FAssets, FDC (viem)
 lib/intent/               intent → step decomposition, userOp preparation
 lib/executor/             delivery engine (nonce tracking, retries, scheduling)
 lib/mcp/                  MCP tools + JSON-RPC server
-lib/store.ts              BigInt-safe persistence (fs / Postgres-ready)
+lib/store.ts              BigInt-safe persistence (fs / volume-backed)
 contracts/                Foundry: AutopilotVault + tests
 scripts/                  deploy, probe, executor round-trip, exit lifecycle
 ```
@@ -192,3 +231,15 @@ cd ../contracts && forge test                                  # 8 passing tests
 Non-custodial end-to-end: the user's XRPL key authorizes every step; the executor delivers only
 the user-committed bytes and holds no user funds. Executor key is server-side only. Steps are
 validated before delivery; broadcasts use explicit gas/fees and a serialized nonce tracker.
+
+## Trust assumptions (explicit)
+
+- **The user's XRPL key** is the root of authority. Every step is a `0xFE` hash-memo payment
+  committing `keccak256(PackedUserOperation)`; the personal account enforces this on-chain, so
+  the executor cannot substitute bytes or trigger a userOp the user did not sign.
+- **The executor** is trusted only to *deliver* faithfully — it is fee-only, never holds user
+  funds or keys, and runs with a server-side key. It cannot move assets on its own.
+- **The Flare Data Connector** is relied on as the oracle for `XRPPayment` attestations, per
+  FSA's own trust model.
+- **Not in scope for this demo:** the demo vault is testnet (60s periods); mainnet vault logic is
+  unchanged but audited separately before funds are involved.
